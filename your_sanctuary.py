@@ -380,7 +380,7 @@ def demosaic(executor, bayerData, w, h):
 if __name__ == "__main__":
 	w = 720
 	h = 480
-	ys_size = 10 # number of "full, encoded images" ys could hold
+	ys_size = 1 # number of "full, encoded images" ys could hold
 	camera_warmup_time = 1.5
 
 	print("Initializing camera...")
@@ -419,6 +419,7 @@ if __name__ == "__main__":
 	try:
 		with open('your_sanctuary.RAW', 'rb') as tf:
 			your_sanctuary = pickle.load(tf)
+		raise debugError
 	except:
 		print("Unable to load your_sanctuary bucket from file.")
 		your_sanctuary = []
@@ -443,7 +444,10 @@ if __name__ == "__main__":
 			print("Writing your_sanctuary bucket to file.")
 			with open('tempfile', 'wb') as tf:
 				pickle.dump(your_sanctuary, tf)
-			os.rename('tempfile', 'your_sanctuary.RAW')
+				tf.flush()
+				os.fsync(tf.fileno())
+				tf.close()
+			os.rename('tempfile', 'your_sanctuary.data')
 
 		truestart = time.time()
 		cameraStream.truncate(0) #clear out camera stream
@@ -457,12 +461,12 @@ if __name__ == "__main__":
 		start = time.time()
 		enc = DPCM_encode(bayer, w, h)
 		print('Encoded: ' + str(time.time() - start))
-
 		#------------------------------------------
 		start = time.time()
 		ysStartOffset = random.randrange(0, len(your_sanctuary))
 		ysEndOffset = ysStartOffset + (w*h//2)
 
+		#print(your_sanctuary)
 		clipStartIndex = random.randrange(0, (w*h//2))
 		clipEndIndex = random.randrange(clipStartIndex, (w*h//2))
 
@@ -470,9 +474,14 @@ if __name__ == "__main__":
 			your_sanctuary[(ysStartOffset + i) % len(your_sanctuary)] = enc[i]
 
 		chunkToDisplay = []
-		for j in range(w*h //2):
+		for i in range(w*h//2):
 			chunkToDisplay.append(your_sanctuary[(ysStartOffset + i) % len(your_sanctuary)])
-		print('Clip injected: ' + str(time.time() - start))
+		print('Image built: ' + str(time.time() - start))
+
+
+		print(chunkToDisplay)
+
+		#print(chunkToDisplay)
 		#TOP ROW RANDOM
 		#for x in range(0, w//2, 5):
 		#	modified_ys_chunk_for_RGB[x] = random.randrange(0, 0xFF)
@@ -504,6 +513,9 @@ if __name__ == "__main__":
 
 				with open('tempfile', 'wb') as tf:
 					pickle.dump(your_sanctuary, tf)
+					tf.flush()
+					os.fsync(tf.fileno())
+					tf.close()
 				os.rename('tempfile', 'your_sanctuary.RAW')
 
 				print("Quitting (Keyboard Interrupt).")
