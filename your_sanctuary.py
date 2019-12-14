@@ -305,17 +305,18 @@ def REmosaicArbitraryImage(RGBdata, w, h):
 				output.append(RGBdata[3*y*w + x])
 	return output
 
-#TODO make this faster.
-def REmosaicPiCam(RGBdata, width, height):
-	global filter
+
+def REmosaicPiCam(RGBdata, w, h):
 	output = []
-	y = 0
-	x = 0
-	for row in RGBdata:
-		for pixel in row:
-			output.append(int(pixel[filter[y%2][x%2]]))
-			x += 1
-		y += 1
+	for y in range(0, h, 2):
+		for x in range(0, w, 2): #RG row
+			output.append(int(RGBdata[y][x][0])) #R
+			output.append(int(RGBdata[y][x+1][1])) #G
+
+		for x in range(0, w, 2): #GB row
+			output.append(int(RGBdata[y][x][1])) #G
+			output.append(int(RGBdata[y][x][2])) #B
+
 	return output
 
 
@@ -380,7 +381,7 @@ def demosaic(executor, bayerData, w, h):
 if __name__ == "__main__":
 	w = 720
 	h = 480
-	ys_size = 1 # number of "full, encoded images" ys could hold
+	ys_size = 100 # number of "full, encoded images" ys could hold
 	camera_warmup_time = 1.5
 
 	print("Initializing camera...")
@@ -419,7 +420,6 @@ if __name__ == "__main__":
 	try:
 		with open('your_sanctuary.RAW', 'rb') as tf:
 			your_sanctuary = pickle.load(tf)
-		raise debugError
 	except:
 		print("Unable to load your_sanctuary bucket from file.")
 		your_sanctuary = []
@@ -431,12 +431,12 @@ if __name__ == "__main__":
 
 	executor = cf.ProcessPoolExecutor()
 	lastWriteTime = time.time()
-
+	'''
 	pygame.init()
 	pygame.mouse.set_visible(False)
 	screen = pygame.display.set_mode((w,h), pygame.FULLSCREEN)
 	pygame.display.set_caption('YOUR SANCTUARY')
-
+	'''
 	while True:
 
 		#check if we need to write to disk
@@ -461,12 +461,12 @@ if __name__ == "__main__":
 		start = time.time()
 		enc = DPCM_encode(bayer, w, h)
 		print('Encoded: ' + str(time.time() - start))
-		#------------------------------------------
+
 		start = time.time()
 		ysStartOffset = random.randrange(0, len(your_sanctuary))
 		ysEndOffset = ysStartOffset + (w*h//2)
 
-		#print(your_sanctuary)
+
 		clipStartIndex = random.randrange(0, (w*h//2))
 		clipEndIndex = random.randrange(clipStartIndex, (w*h//2))
 
@@ -476,31 +476,35 @@ if __name__ == "__main__":
 		chunkToDisplay = []
 		for i in range(w*h//2):
 			chunkToDisplay.append(your_sanctuary[(ysStartOffset + i) % len(your_sanctuary)])
-		print('Image built: ' + str(time.time() - start))
+		print('Build encoded glitch chunk: ' + str(time.time() - start))
 
+		for x in range(0, w//2, 3):
+			chunkToDisplay [x] = random.randrange(0, 0xFF)
 
-		print(chunkToDisplay)
-
-		#print(chunkToDisplay)
-		#TOP ROW RANDOM
-		#for x in range(0, w//2, 5):
-		#	modified_ys_chunk_for_RGB[x] = random.randrange(0, 0xFF)
-		#LEFT COLUMN RANDOM
-		#for y in range(0, h, 5):
-		#		modified_ys_chunk_for_RGB[(y*w//2)] = random.randrange(0, 0xFF)
+		for y in range(40):
+			randIndex = random.randrange(0, h)
+			chunkToDisplay[(randIndex*w//2)] = random.randrange(0, 0xFF)
 
 		start = time.time()
 		bayerData = DPCM_decode(chunkToDisplay, w, h)
 		print('Decoded: ' + str(time.time() - start))
-		RGBglitch = demosaic(executor, bayerData, w, h)
 		start = time.time()
+		RGBglitch = demosaic(executor, bayerData, w, h)
 		print('Demosaiced: ' + str(time.time() - start))
 
 		print('Total: ' + str(time.time() - truestart))
 
 		#------------------------------------------
+		demobytes = bytearray(RGBglitch)
+		tempfile = open("tempfile.data", "wb")
+		for byte in demobytes:
+			tempfile.write(byte.to_bytes(1, byteorder='big'))
+		tempfile.flush()
+		os.fsync(tempfile.fileno())
+		tempfile.close()
+		os.rename('tempfile.data', 'glitchin.data')
 
-
+		'''
 		image = pygame.image.frombuffer(bytearray(RGBglitch), (w,h), 'RGB')
 		screen.blit(image, (0,0))
 		pygame.display.flip()
@@ -521,3 +525,4 @@ if __name__ == "__main__":
 				print("Quitting (Keyboard Interrupt).")
 				pygame.quit()
 				quit()
+		'''
