@@ -420,6 +420,7 @@ if __name__ == "__main__":
 	try:
 		with open('your_sanctuary.RAW', 'rb') as tf:
 			your_sanctuary = pickle.load(tf)
+			print("Loaded your_sanctuary bucket from file.")
 	except:
 		print("Unable to load your_sanctuary bucket from file.")
 		your_sanctuary = []
@@ -431,12 +432,12 @@ if __name__ == "__main__":
 
 	executor = cf.ProcessPoolExecutor()
 	lastWriteTime = time.time()
-	'''
+
 	pygame.init()
 	pygame.mouse.set_visible(False)
 	screen = pygame.display.set_mode((w,h), pygame.FULLSCREEN)
 	pygame.display.set_caption('YOUR SANCTUARY')
-	'''
+
 	while True:
 
 		#check if we need to write to disk
@@ -448,6 +449,7 @@ if __name__ == "__main__":
 				os.fsync(tf.fileno())
 				tf.close()
 			os.rename('tempfile', 'your_sanctuary.data')
+			lastWriteTime = time.time()
 
 		truestart = time.time()
 		cameraStream.truncate(0) #clear out camera stream
@@ -494,7 +496,6 @@ if __name__ == "__main__":
 
 		print('Total: ' + str(time.time() - truestart))
 
-		#------------------------------------------
 		demobytes = bytearray(RGBglitch)
 		tempfile = open("tempfile.data", "wb")
 		for byte in demobytes:
@@ -504,7 +505,7 @@ if __name__ == "__main__":
 		tempfile.close()
 		os.rename('tempfile.data', 'glitchin.data')
 
-		'''
+
 		image = pygame.image.frombuffer(bytearray(RGBglitch), (w,h), 'RGB')
 		screen.blit(image, (0,0))
 		pygame.display.flip()
@@ -525,4 +526,3 @@ if __name__ == "__main__":
 				print("Quitting (Keyboard Interrupt).")
 				pygame.quit()
 				quit()
-		'''
