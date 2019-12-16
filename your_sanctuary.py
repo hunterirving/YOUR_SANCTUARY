@@ -497,14 +497,14 @@ if __name__ == "__main__":
 
 		print('Total: ' + str(time.time() - truestart))
 
-		demobytes = bytearray(RGBglitch)
+		'''demobytes = bytearray(RGBglitch)
 		tempfile = open("tempfile.data", "wb")
 		for byte in demobytes:
 			tempfile.write(byte.to_bytes(1, byteorder='big'))
 		tempfile.flush()
 		os.fsync(tempfile.fileno())
 		tempfile.close()
-		os.rename('tempfile.data', 'glitchin.data')
+		os.rename('tempfile.data', 'glitchin.data')'''
 
 
 		image = pygame.image.frombuffer(bytearray(RGBglitch), (w,h), 'RGB')
@@ -522,7 +522,7 @@ if __name__ == "__main__":
 					tf.flush()
 					os.fsync(tf.fileno())
 					tf.close()
-				os.rename('tempfile', 'your_sanctuary.RAW')
+				os.rename('tempfile', 'your_sanctuary.data')
 
 				print("Quitting (Keyboard Interrupt).")
 				pygame.quit()
