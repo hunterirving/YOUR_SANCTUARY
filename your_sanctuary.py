@@ -418,13 +418,14 @@ if __name__ == "__main__":
 	print("Test capture successful. (" + str(cameraStream.array.shape[1]) + " x " + str(cameraStream.array.shape[0]) + ")")
 
 	try:
-		with open('your_sanctuary.RAW', 'rb') as tf:
+		with open('your_sanctuary.data', 'rb') as tf:
 			your_sanctuary = pickle.load(tf)
 			print("Loaded your_sanctuary bucket from file.")
 	except:
 		print("Unable to load your_sanctuary bucket from file.")
 		your_sanctuary = []
 		for i in range((h * w // 2) * ys_size):
+			print("Initializing new your_sanctuary bucket {:.2f}".format(i/(h*w//2*ys_size)*100) + "% complete.",end ="\r")
 			your_sanctuary.append(random.randrange(0, 0xFF))
 		print("Initialized your_sanctuary bucket with random values.")
 
