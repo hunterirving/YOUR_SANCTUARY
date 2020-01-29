@@ -8,7 +8,6 @@ import picamera
 import picamera.array
 import random
 import concurrent.futures as cf
-import numpy as np
 import pickle
 
 
@@ -19,6 +18,18 @@ filter = [[0, 1], [1, 2]] #R, G, G, B
 
 
 def DPCM_encode(bayerData, w, h):
+	'''
+	Lossyly compress a frame of CFA/Bayer data (RGGB) to half of its original size using a differential compression algorithm.
+
+	1. iterating over each Bayer-pixel, generate an intensity prediction
+	   (average of previously generated values (predictions + quantized differences) for nearby (above and to the left) like-color pixels (when they exist))
+	2. subtract this prediction from the true intensity at the current location
+	2. quantize this difference to the nearest value in delta_table, storing the index of the quantized value
+	   (note: since len(delta_table) = 16 = 2^4, every index can be stored in 4 bits - HALF of the original 8-bit intensity value)
+	3. construct new 8-bit bytes by compounding pairs of 4-bit nybbles (left pixel, then right)
+
+	4. return the resultant array of bytes, having length w*h/2 and being comprised of nybble-pairs representing indexes into delta_table
+	'''
 	delta_table = [-144, -110, -77, -53, -35, -21, -11, -3, 2, 10, 20, 34, 52, 76, 110, 144]
 	tempLineRed = [0x80] * w
 	tempLineGreen = [0x80] * w
@@ -88,6 +99,17 @@ def DPCM_encode(bayerData, w, h):
 
 
 def DPCM_decode(differenceIndexes, w, h):
+	'''
+	Decompress a compressed CFA/Bayer data frame back to its original size (2x compressed size).
+
+	1. split bytes into left and right nybbles (each representing a delta_table index)
+	2. iterating over each location in the resultant frame, generate an intensity prediction
+	   (average of previously generated values (predictions + quantized differences) for nearby (above and to the left) like-color pixels (when they exist))
+	3. add the delta_table value at the index held by the current nybble to the generated intensity prediction
+	4. clamp this value to the range 0-255 (a positive 8-bit number)
+
+	5. return the resultant array of bytes, having length w*h and being comprised of 8-bit values representing raw CFA/Bayer data (RGGB)
+	'''
 	delta_table = [-144, -110, -77, -53, -35, -21, -11, -3, 2, 10, 20, 34, 52, 76, 110, 144]
 	halfw = w//2
 	tempLineRed = [0x80] * w
@@ -157,6 +179,9 @@ def DPCM_decode(differenceIndexes, w, h):
 
 
 def quantize(myList, val):
+	'''
+	Quantize 'val' to the nearest value in myList. Used in DPCM_encode.
+	'''
 	#assumes myList is sorted.
 	pos = bisect_left(myList, val)
 	if pos == 0:
@@ -172,6 +197,9 @@ def quantize(myList, val):
 
 
 def demosaicRed(bayerData, w, h):
+	'''
+	Use known red values to interpolate missing red values.
+	'''
 	redChannel = [] #*w*h
 	finalTrueRed = h*w - 2
 	for y in range(0, h-2, 2): #handle everything but final two ROWS (of RG, BG)
@@ -199,6 +227,9 @@ def demosaicRed(bayerData, w, h):
 
 
 def demosaicBlue(bayerData, w, h):
+	'''
+	Use known blue values to interpolate missing blue values.
+	'''
 	blueChannel = []
 	GBLine = []
 	GBLine.append(bayerData[w+1])
@@ -225,6 +256,9 @@ def demosaicBlue(bayerData, w, h):
 
 
 def demosaicRG_Green(bayerData, w, h):
+	'''
+	Use known even row green values to interpolate missing even row green values.
+	'''
 	RG_greenChannel = []
 	RG_greenChannel.append((bayerData[1] + bayerData[w]) // 2)
 	RG_greenChannel.append(bayerData[1])
@@ -246,6 +280,9 @@ def demosaicRG_Green(bayerData, w, h):
 
 
 def demosaicGB_Green(bayerData, w, h):
+	'''
+	Use known odd row green values to interpolate missing odd row green values.
+	'''
 	GB_greenChannel = []
 	hwm1 = h*(w-1)
 	hwm2 = h*(w-2)
@@ -271,6 +308,10 @@ def demosaicGB_Green(bayerData, w, h):
 
 
 def expand(bayerData, w, h):
+	'''
+	Inflate raw Bayer/CFA data to raw RGB format (3 bytes per pixel, 1 for each color).
+	Only used for testing.
+	'''
 	global filter
 	expandedData = [0] * (len(bayerData) * 3)
 	for y in range(h):
@@ -282,6 +323,9 @@ def expand(bayerData, w, h):
 
 
 def clamp(x):
+	'''
+	Clamp arbitrary values to an 8-bit range (used in DPCM_encode and DPCM_decode).
+	'''
 	if x > 255:
 		return 255
 	elif x < 0:
@@ -291,6 +335,9 @@ def clamp(x):
 
 
 def REmosaicArbitraryImage(RGBdata, w, h):
+	'''
+	Given an arbitrary RGB image, discard 2/3 of input data to create artificial CFA/Bayer data (used for testing).
+	'''
 	global filter
 	RED = 0
 	GREEN = 1
@@ -307,6 +354,9 @@ def REmosaicArbitraryImage(RGBdata, w, h):
 
 
 def REmosaicPiCam(RGBdata, w, h):
+	'''
+	Given a PiCamera RGB frame, discard 2/3 of input data to create artificial CFA/Bayer data.
+	'''
 	output = []
 	for y in range(0, h, 2):
 		for x in range(0, w, 2): #RG row
@@ -321,6 +371,10 @@ def REmosaicPiCam(RGBdata, w, h):
 
 
 def postprocess(RGBdata, w, h):
+	'''
+	Normalize brightness and contrast to make images 'punchier' (unused).
+	Adapted from libgphoto2.
+	'''
 	red_min = 255
 	red_max = 0
 	blue_min = 255
@@ -348,6 +402,10 @@ def postprocess(RGBdata, w, h):
 
 
 def demosaic(executor, bayerData, w, h):
+	'''
+	Convert a frame of raw Bayer/CFA data to RGB data.
+	Paralellized for a (very) small performance increase.
+	'''
 	redFuture = executor.submit(demosaicRed, bayerData, w, h)
 	RG_greenFuture = executor.submit(demosaicRG_Green, bayerData, w, h)
 	GB_greenFuture = executor.submit(demosaicGB_Green, bayerData, w, h)
@@ -379,6 +437,28 @@ def demosaic(executor, bayerData, w, h):
 	return out
 
 if __name__ == "__main__":
+	'''
+	1. Initialize camera
+	2. Unpickle your_sanctuary data to a list
+
+	3. Begin main loop...
+	   a. Capture a single RGB frame from PiCamera
+	   b. (Lossyly) remosaic that frame to raw Bayer/CFA data
+	   c. DPCM compress that data
+	   d. Randomly select a location in your_sanctuary representing the start of a compressed frame
+	      (to later be decompressed, demosaiced, and displayed on-screen)
+	   e. Clip a contiguous chunk of compressed data (between 0 and w*h/2 bytes) from the most recently compressed frame (see c above)
+	   f. Write that clip to your_sanctuary (specifically, within the boundaries of the frame that has been selected for display),
+	      overwriting the existing data at that location
+	   g. Introduce error into topmost row and leftmost column to encourage colorful, streaking artifacts
+	   h. Decompress the (now modified) frame (of length w*h/2) beginning at the location randomly selected in (d) and looping around the end of your_sanctuary
+	          Note: This is where the 'glitch' effect occurs. As prediction deltas are no longer in their original context,
+			  and since the algorithm depends on previously calculated values, 'errors' manifest as colorful, streaking artifacts
+			  traveling down and to the right.
+	   i. Demosaic that frame of decompressed Bayer/CFA data to raw RGB data
+	   j. Display that RGB data as an image on-screen
+	'''
+
 	w = 720
 	h = 480
 	ys_size = 100 # number of "full, encoded images" ys could hold
@@ -410,6 +490,7 @@ if __name__ == "__main__":
 			print("Set camera contrast to " + str(camera_settings.contrast) + ".")
 		except:
 			print("Failed to create camera settings file.")
+			print("Exiting.")
 			quit()
 
 	print("Warming up camera (" + str(camera_warmup_time) + " second(s))...")
@@ -473,6 +554,7 @@ if __name__ == "__main__":
 		clipStartIndex = random.randrange(0, (w*h//2))
 		clipEndIndex = random.randrange(clipStartIndex, (w*h//2))
 
+		#insert clip into ys
 		for i in range(clipStartIndex, clipEndIndex):
 			your_sanctuary[(ysStartOffset + i) % len(your_sanctuary)] = enc[i]
 
@@ -481,9 +563,11 @@ if __name__ == "__main__":
 			chunkToDisplay.append(your_sanctuary[(ysStartOffset + i) % len(your_sanctuary)])
 		print('Build encoded glitch chunk: ' + str(time.time() - start))
 
+		#add some top edge randomness
 		for x in range(0, w//2, 3):
-			chunkToDisplay [x] = random.randrange(0, 0xFF)
+			chunkToDisplay[x] = random.randrange(0, 0xFF)
 
+		#add some left edge randomness
 		for y in range(40):
 			randIndex = random.randrange(0, h)
 			chunkToDisplay[(randIndex*w//2)] = random.randrange(0, 0xFF)
@@ -496,16 +580,6 @@ if __name__ == "__main__":
 		print('Demosaiced: ' + str(time.time() - start))
 
 		print('Total: ' + str(time.time() - truestart))
-
-		'''demobytes = bytearray(RGBglitch)
-		tempfile = open("tempfile.data", "wb")
-		for byte in demobytes:
-			tempfile.write(byte.to_bytes(1, byteorder='big'))
-		tempfile.flush()
-		os.fsync(tempfile.fileno())
-		tempfile.close()
-		os.rename('tempfile.data', 'glitchin.data')'''
-
 
 		image = pygame.image.frombuffer(bytearray(RGBglitch), (w,h), 'RGB')
 		screen.blit(image, (0,0))
@@ -524,6 +598,6 @@ if __name__ == "__main__":
 					tf.close()
 				os.rename('tempfile', 'your_sanctuary.data')
 
-				print("Quitting (Keyboard Interrupt).")
+				print("Exiting (Keyboard Interrupt).")
 				pygame.quit()
 				quit()
